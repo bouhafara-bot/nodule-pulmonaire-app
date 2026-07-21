@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0E1520">
+<title>Nodule pulmonaire — aide à la décision</title>
+<style>
+  :root{
+    --ink:#0E1520;        /* fond salle de lecture */
+    --panel:#16202E;      /* carte */
+    --panel-2:#1E2A3A;    /* champ */
+    --line:#2A3A4E;       /* filet */
+    --line-soft:#22303F;
+    --txt:#E8EEF4;
+    --muted:#8698AC;
+    --muted-2:#63768B;
+    --cyan:#3DD6C4;       /* accent médical (overlay PACS) */
+    --cyan-dim:#1F5C57;
+    --green:#35C46B;
+    --amber:#E8B23A;
+    --red:#E5564E;
+    --radius:14px;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--ink);
+    color:var(--txt);
+    font-family:var(--sans);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+
+  /* ---- header ---- */
+  .top{border-top:2px solid var(--cyan);padding-top:18px;margin-bottom:20px}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--cyan);margin-bottom:8px}
+  h1{font-size:23px;line-height:1.15;margin:0 0 6px;letter-spacing:-.01em;font-weight:650}
+  .sub{color:var(--muted);font-size:13.5px;margin:0}
+  .sub b{color:var(--txt);font-weight:600}
+
+  /* ---- tabs ---- */
+  .tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px;margin:22px 0 18px;position:sticky;top:6px;z-index:5;backdrop-filter:blur(6px)}
+  .tab{appearance:none;border:0;background:transparent;color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:11px 2px;border-radius:9px;cursor:pointer;transition:background .18s,color .18s;letter-spacing:0}
+  .tab:hover{color:var(--txt)}
+  .tab[aria-selected="true"]{background:var(--panel-2);color:var(--cyan)}
+  .tab:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+  .panel{display:none;animation:fade .25s ease}
+  .panel.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  /* ---- form bits ---- */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .card + .card{margin-top:14px}
+  .field{margin-bottom:15px}
+  .field:last-child{margin-bottom:0}
+  .lab{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .lab .hint{color:var(--muted-2);text-transform:none;letter-spacing:0;font-size:11px;margin-left:6px}
+
+  .seg{display:flex;gap:4px;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:4px}
+  .seg button{flex:1;appearance:none;border:0;background:transparent;color:var(--muted);font-family:var(--sans);font-size:14px;font-weight:600;padding:11px 6px;border-radius:8px;cursor:pointer;transition:background .16s,color .16s;min-height:44px}
+  .seg button:hover{color:var(--txt)}
+  .seg button[aria-pressed="true"]{background:var(--cyan);color:#08131a}
+  .seg button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  .seg.tri button{font-size:13px}
+
+  .num-row{display:flex;gap:10px;flex-wrap:wrap}
+  .num{flex:1;min-width:120px}
+  input[type=number],input[type=date],input[type=text],input[type=email]{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;color:var(--txt);font-family:var(--mono);font-size:17px;padding:12px 13px;min-height:46px}
+  input[type=number]:focus,input[type=date]:focus,input[type=text]:focus,input[type=email]:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px rgba(61,214,196,.15)}
+  input::placeholder{color:var(--muted-2)}
+  .unit{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px}
+
+  .disabled-note{font-size:12.5px;color:var(--muted-2);margin-top:8px;font-style:italic}
+  .hide{display:none !important}
+
+  /* ---- result ---- */
+  .result{margin-top:16px;border-radius:var(--radius);border:1px solid var(--line);overflow:hidden;background:var(--panel)}
+  .result-bar{height:4px;background:var(--cyan)}
+  .result-in{padding:18px 16px}
+  .r-tier{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);flex:none}
+  .r-title{font-size:18px;font-weight:650;line-height:1.25;margin:0 0 8px}
+  .r-detail{color:#C3D0DE;font-size:14.5px;margin:0}
+  .r-note{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-soft);color:var(--muted);font-size:13px}
+  .r-note b{color:#C3D0DE;font-weight:600}
+
+  /* tier colors */
+  .t0 .result-bar,.t0 .dot{background:var(--green)} .t0 .r-tier{color:var(--green)}
+  .t1 .result-bar,.t1 .dot{background:var(--cyan)} .t1 .r-tier{color:var(--cyan)}
+  .t2 .result-bar,.t2 .dot{background:var(--amber)} .t2 .r-tier{color:var(--amber)}
+  .t3 .result-bar,.t3 .dot{background:var(--red)} .t3 .r-tier{color:var(--red)}
+
+  /* ---- brock readout + meter (signature) ---- */
+  .readout{text-align:center;padding:6px 0 2px}
+  .big{font-family:var(--mono);font-size:56px;font-weight:600;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .big .pct{font-size:26px;color:var(--muted);margin-left:2px}
+  .band-label{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin-top:10px}
+
+  .meter{margin:22px 2px 6px;position:relative}
+  .track{height:12px;border-radius:8px;background:linear-gradient(90deg,var(--green) 0%,var(--green) 8%,var(--amber) 14%,var(--amber) 62%,var(--red) 78%,var(--red) 100%);position:relative}
+  .tick{position:absolute;top:-5px;width:2px;height:22px;background:var(--txt);opacity:.55;transform:translateX(-1px)}
+  .tick-lab{position:absolute;top:24px;font-family:var(--mono);font-size:10px;color:var(--muted);transform:translateX(-50%);white-space:nowrap}
+  .marker{position:absolute;top:50%;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--ink);box-shadow:0 0 0 2px #fff,0 2px 8px rgba(0,0,0,.5);transform:translate(-50%,-50%);left:0%;transition:left .5s cubic-bezier(.22,1,.36,1)}
+  .zones{display:flex;justify-content:space-between;margin-top:38px;font-size:11.5px;color:var(--muted)}
+  .zones span{flex:1;text-align:center}
+  .zones span b{display:block;color:#C3D0DE;font-weight:600;font-size:12px;margin-bottom:1px}
+
+  /* ---- repères ---- */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:560px){.cols{grid-template-columns:1fr}}
+  .refcard h3{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line-soft)}
+  .refcard.ben h3{color:var(--green)} .refcard.mal h3{color:var(--red)}
+  .refcard ul{margin:0;padding-left:17px}
+  .refcard li{font-size:13.5px;margin-bottom:7px;color:#C3D0DE}
+  .refcard li b{color:var(--txt)}
+  .calc-grid{display:grid;grid-template-columns:1fr;gap:9px;margin-top:2px}
+  .cal{display:flex;gap:11px;align-items:baseline;font-size:13.5px;padding:9px 11px;background:var(--panel-2);border:1px solid var(--line-soft);border-radius:10px}
+  .cal .k{font-family:var(--mono);font-size:11px;color:var(--cyan);letter-spacing:.05em;flex:none;width:78px;text-transform:uppercase}
+  .cal .v{color:#C3D0DE}
+
+  /* ---- footer ---- */
+  .byline{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:16px;margin-bottom:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .by-lab{font-family:var(--mono);font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted-2)}
+  .by-names{font-size:15px;font-weight:600;color:var(--txt);letter-spacing:.01em}
+  .by-names sup{font-size:.62em;font-weight:600}
+  footer{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted-2);font-size:11.5px;line-height:1.6}
+  footer b{color:var(--muted)}
+  footer a{color:var(--cyan);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+  .warn{background:rgba(229,86,78,.07);border:1px solid rgba(229,86,78,.25);border-radius:10px;padding:11px 13px;color:#E9B7B4;font-size:12.5px;margin-top:12px}
+
+  /* ---- inscription / vérification ---- */
+  .stage{animation:fade .25s ease}
+  .btn-primary{appearance:none;border:0;width:100%;background:var(--cyan);color:#08131a;font-family:var(--sans);font-size:15px;font-weight:650;padding:13px;border-radius:11px;cursor:pointer;min-height:48px;margin-top:4px}
+  .btn-primary:hover{filter:brightness(1.06)}
+  .btn-primary:disabled{opacity:.55;cursor:not-allowed}
+  .btn-link{appearance:none;border:0;background:transparent;color:var(--muted);font-family:var(--sans);font-size:12.5px;text-decoration:underline;cursor:pointer;padding:8px 0}
+  .form-msg{font-size:13px;margin-top:12px;padding:11px 13px;border-radius:10px;display:none}
+  .form-msg.show{display:block}
+  .form-msg.ok{background:rgba(53,196,107,.1);border:1px solid rgba(53,196,107,.3);color:#9FE3B8}
+  .form-msg.err{background:rgba(229,86,78,.08);border:1px solid rgba(229,86,78,.28);color:#E9B7B4}
+  .step-lab{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);margin-bottom:10px}
+
+  @media(prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div class="kicker">Pneumologie · aide à la décision</div>
+    <h1>Nodule pulmonaire incident</h1>
+    <p class="sub">Conduite <b>Fleischner 2017</b> · probabilité <b>Brock / PanCan</b> · temps de doublement · repères sémiologiques</p>
+  </div>
+
+  <!-- ============ STAGE 1 : INSCRIPTION ============ -->
+  <section class="stage" id="stage-register">
+    <div class="card">
+      <div class="step-lab">Étape 1 / 2 — Inscription</div>
+      <form id="form-register" autocomplete="off">
+        <div class="field">
+          <span class="lab">Nom</span>
+          <input type="text" id="reg-nom" required placeholder="ex. Bouhafara">
+        </div>
+        <div class="field">
+          <span class="lab">Prénom</span>
+          <input type="text" id="reg-prenom" required placeholder="ex. Nabil">
+        </div>
+        <div class="field">
+          <span class="lab">Lieu d'exercice</span>
+          <input type="text" id="reg-lieu" required placeholder="ex. CHU, cabinet libéral...">
+        </div>
+        <div class="field">
+          <span class="lab">Email <span class="hint">le code d'accès y sera envoyé</span></span>
+          <input type="email" id="reg-email" required placeholder="ex. nom@exemple.com">
+        </div>
+        <button type="submit" class="btn-primary" id="btn-register">S'inscrire et recevoir mon code</button>
+        <div class="form-msg" id="register-msg"></div>
+      </form>
+    </div>
+    <p class="disabled-note" style="margin-top:12px">Un code d'accès personnel vous sera envoyé par email. Chaque inscription est enregistrée.</p>
+  </section>
+
+  <!-- ============ STAGE 2 : VÉRIFICATION DU CODE ============ -->
+  <section class="stage hide" id="stage-verify">
+    <div class="card">
+      <div class="step-lab">Étape 2 / 2 — Vérification</div>
+      <form id="form-verify" autocomplete="off">
+        <div class="field">
+          <span class="lab">Email</span>
+          <input type="email" id="ver-email" required placeholder="ex. nom@exemple.com">
+        </div>
+        <div class="field">
+          <span class="lab">Code reçu par email</span>
+          <input type="text" id="ver-code" required placeholder="ex. A7K9QX2P" style="text-transform:uppercase;letter-spacing:.12em">
+        </div>
+        <button type="submit" class="btn-primary" id="btn-verify">Accéder à la calculette</button>
+        <div class="form-msg" id="verify-msg"></div>
+        <button type="button" class="btn-link" id="btn-back-register">← Revenir à l'inscription</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ STAGE 3 : CALCULETTE ============ -->
+  <section class="stage hide" id="stage-calc">
+
+  <div class="tabs" role="tablist" aria-label="Modules">
+    <button class="tab" role="tab" id="tab-f" aria-selected="true" aria-controls="p-f" onclick="showTab('f')">Fleischner</button>
+    <button class="tab" role="tab" id="tab-b" aria-selected="false" aria-controls="p-b" onclick="showTab('b')">Brock</button>
+    <button class="tab" role="tab" id="tab-v" aria-selected="false" aria-controls="p-v" onclick="showTab('v')">VDT</button>
+    <button class="tab" role="tab" id="tab-r" aria-selected="false" aria-controls="p-r" onclick="showTab('r')">Repères</button>
+    <button class="tab" role="tab" id="tab-bx" aria-selected="false" aria-controls="p-bx" onclick="showTab('bx')">Biopsie</button>
+  </div>
+
+  <!-- ============ FLEISCHNER ============ -->
+  <section class="panel on" id="p-f" role="tabpanel" aria-labelledby="tab-f">
+    <div class="card">
+      <div class="field">
+        <span class="lab">Densité du nodule</span>
+        <div class="seg tri" id="f-type">
+          <button aria-pressed="true" onclick="setF('type','solid',this)">Solide</button>
+          <button aria-pressed="false" onclick="setF('type','part',this)">Part-solide</button>
+          <button aria-pressed="false" onclick="setF('type','ggn',this)">Verre dépoli</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lab">Nombre</span>
+        <div class="seg" id="f-count">
+          <button aria-pressed="true" onclick="setF('count','single',this)">Unique</button>
+          <button aria-pressed="false" onclick="setF('count','multiple',this)">Multiples</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lab">Taille du nodule <span class="hint">plus grand axe moyen, mm</span></span>
+        <div class="num-row">
+          <div class="num"><input type="number" id="f-size" min="1" max="30" step="0.5" inputmode="decimal" placeholder="ex. 7" oninput="renderF()"></div>
+        </div>
+      </div>
+
+      <div class="field hide" id="f-solid-wrap">
+        <span class="lab">Composante solide <span class="hint">part-solide, mm</span></span>
+        <div class="num-row">
+          <div class="num"><input type="number" id="f-solid" min="0" max="30" step="0.5" inputmode="decimal" placeholder="ex. 3" oninput="renderF()"></div>
+        </div>
+      </div>
+
+      <div class="field" id="f-risk-wrap">
+        <span class="lab">Catégorie de risque <span class="hint">nodule solide</span></span>
+        <div class="seg" id="f-risk">
+          <button aria-pressed="true" onclick="setF('risk','low',this)">Bas risque</button>
+          <button aria-pressed="false" onclick="setF('risk','high',this)">Haut risque</button>
+        </div>
+        <p class="disabled-note" id="f-risk-note">Haut risque = tabagisme important, ATCD de cancer, morphologie/localisation suspecte (lobe supérieur), âge avancé, emphysème.</p>
+      </div>
+    </div>
+
+    <div class="result t1" id="f-result" aria-live="polite">
+      <div class="result-bar"></div>
+      <div class="result-in">
+        <div class="r-tier"><span class="dot"></span><span id="f-tier-txt">En attente</span></div>
+        <p class="r-title" id="f-title">Saisir la taille du nodule</p>
+        <p class="r-detail" id="f-detail">La recommandation s'affiche automatiquement.</p>
+        <div class="r-note hide" id="f-note-wrap"><span id="f-note"></span></div>
+      </div>
+    </div>
+    <p class="disabled-note" style="margin-top:12px">Ne s'applique pas au dépistage, aux immunodéprimés, ni aux patients avec cancer primitif connu. Adultes &gt; 35 ans. Nodules multiples : la conduite suit le nodule le plus suspect.</p>
+  </section>
+
+  <!-- ============ BROCK ============ -->
+  <section class="panel" id="p-b" role="tabpanel" aria-labelledby="tab-b">
+    <div class="card">
+      <div class="field">
+        <div class="num-row">
+          <div class="num">
+            <span class="lab">Âge <span class="hint">ans</span></span>
+            <input type="number" id="b-age" min="18" max="99" step="1" inputmode="numeric" placeholder="ex. 64" oninput="renderB()">
+          </div>
+          <div class="num">
+            <span class="lab">Taille <span class="hint">mm</span></span>
+            <input type="number" id="b-size" min="1" max="30" step="0.5" inputmode="decimal" placeholder="ex. 12" oninput="renderB()">
+          </div>
+          <div class="num">
+            <span class="lab">Nb nodules</span>
+            <input type="number" id="b-count" min="1" max="30" step="1" inputmode="numeric" placeholder="1" value="1" oninput="renderB()">
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lab">Sexe</span>
+        <div class="seg" id="b-sex">
+          <button aria-pressed="false" onclick="setB('sex','F',this)">Femme</button>
+          <button aria-pressed="true" onclick="setB('sex','M',this)">Homme</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lab">Densité</span>
+        <div class="seg tri" id="b-type">
+          <button aria-pressed="true" onclick="setB('type','solid',this)">Solide</button>
+          <button aria-pressed="false" onclick="setB('type','part',this)">Part-solide</button>
+          <button aria-pressed="false" onclick="setB('type','ggn',this)">Verre dépoli</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lab">Siège lobe supérieur</span>
+        <div class="seg" id="b-upper">
+          <button aria-pressed="false" onclick="setB('upper',true,this)">Oui</button>
+          <button aria-pressed="true" onclick="setB('upper',false,this)">Non</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lab">Contours spiculés</span>
+        <div class="seg" id="b-spic">
+          <button aria-pressed="false" onclick="setB('spic',true,this)">Oui</button>
+          <button aria-pressed="true" onclick="setB('spic',false,this)">Non</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lab">Emphysème au scanner</span>
+        <div class="seg" id="b-emph">
+          <button aria-pressed="false" onclick="setB('emph',true,this)">Oui</button>
+          <button aria-pressed="true" onclick="setB('emph',false,this)">Non</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lab">ATCD familial de cancer du poumon</span>
+        <div class="seg" id="b-fam">
+          <button aria-pressed="false" onclick="setB('fam',true,this)">Oui</button>
+          <button aria-pressed="true" onclick="setB('fam',false,this)">Non</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="result t1" id="b-result" aria-live="polite">
+      <div class="result-bar"></div>
+      <div class="result-in">
+        <div class="readout">
+          <div class="big" id="b-big">—<span class="pct"></span></div>
+          <div class="band-label" id="b-band">Saisir âge et taille</div>
+        </div>
+
+        <div class="meter" id="b-meter" aria-hidden="true">
+          <div class="track">
+            <div class="tick" style="left:10%"></div>
+            <div class="tick-lab" style="left:10%">10 %</div>
+            <div class="tick" style="left:70%"></div>
+            <div class="tick-lab" style="left:70%">70 %</div>
+            <div class="marker" id="b-marker" style="left:0%"></div>
+          </div>
+          <div class="zones">
+            <span><b>&lt; 10 %</b>Surveillance TDM</span>
+            <span><b>10–70 %</b>TEP-TDM</span>
+            <span><b>&gt; 70 %</b>Prélèvement / résection</span>
+          </div>
+        </div>
+
+        <p class="r-detail" id="b-interp" style="margin-top:8px"></p>
+        <div class="r-note" id="b-note-wrap"><span id="b-note"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VDT ============ -->
+  <section class="panel" id="p-v" role="tabpanel" aria-labelledby="tab-v">
+    <div class="card">
+      <p class="r-detail" style="margin:0 0 15px">Temps de doublement volumétrique. Sphère (un diamètre) ou ellipsoïde (trois axes) pour une mesure manuelle ; pour un nodule <b>polylobé</b> ou à contours irréguliers, saisir directement le volume mesuré par volumétrie (segmentation) — plus fiable.</p>
+
+      <div class="field">
+        <span class="lab">Méthode de mesure du volume</span>
+        <div class="seg tri" id="v-mode">
+          <button aria-pressed="true" onclick="setVmode('sph',this)">Sphère</button>
+          <button aria-pressed="false" onclick="setVmode('ell',this)">Ellipsoïde</button>
+          <button aria-pressed="false" onclick="setVmode('vol',this)">Volumétrie</button>
+        </div>
+      </div>
+
+      <div id="v-sph">
+        <div class="field">
+          <div class="num-row">
+            <div class="num">
+              <span class="lab">Scanner 1 — diamètre <span class="hint">mm</span></span>
+              <input type="number" id="v-d1" min="0.5" max="80" step="0.1" inputmode="decimal" placeholder="ex. 9" oninput="renderV()">
+            </div>
+            <div class="num">
+              <span class="lab">Scanner 2 — diamètre <span class="hint">mm</span></span>
+              <input type="number" id="v-d2" min="0.5" max="80" step="0.1" inputmode="decimal" placeholder="ex. 11" oninput="renderV()">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="v-ell" class="hide">
+        <div class="field">
+          <span class="lab">Scanner 1 — axes <span class="hint">L × l × h, mm</span></span>
+          <div class="num-row">
+            <div class="num"><input type="number" id="v-l1" min="0.5" max="80" step="0.1" inputmode="decimal" placeholder="L" oninput="renderV()"></div>
+            <div class="num"><input type="number" id="v-w1" min="0.5" max="80" step="0.1" inputmode="decimal" placeholder="l" oninput="renderV()"></div>
+            <div class="num"><input type="number" id="v-h1" min="0.5" max="80" step="0.1" inputmode="decimal" placeholder="h" oninput="renderV()"></div>
+          </div>
+        </div>
+        <div class="field">
+          <span class="lab">Scanner 2 — axes <span class="hint">L × l × h, mm</span></span>
+          <div class="num-row">
+            <div class="num"><input type="number" id="v-l2" min="0.5" max="80" step="0.1" inputmode="decimal" placeholder="L" oninput="renderV()"></div>
+            <div class="num"><input type="number" id="v-w2" min="0.5" max="80" step="0.1" inputmode="decimal" placeholder="l" oninput="renderV()"></div>
+            <div class="num"><input type="number" id="v-h2" min="0.5" max="80" step="0.1" inputmode="decimal" placeholder="h" oninput="renderV()"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="v-vol" class="hide">
+        <div class="field">
+          <div class="num-row">
+            <div class="num">
+              <span class="lab">Scanner 1 — volume <span class="hint">mm³</span></span>
+              <input type="number" id="v-vol1" min="1" step="1" inputmode="decimal" placeholder="ex. 260" oninput="renderV()">
+            </div>
+            <div class="num">
+              <span class="lab">Scanner 2 — volume <span class="hint">mm³</span></span>
+              <input type="number" id="v-vol2" min="1" step="1" inputmode="decimal" placeholder="ex. 520" oninput="renderV()">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="num-row">
+          <div class="num">
+            <span class="lab">Date 1</span>
+            <input type="date" id="v-t1" oninput="renderV()">
+          </div>
+          <div class="num">
+            <span class="lab">Date 2</span>
+            <input type="date" id="v-t2" oninput="renderV()">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="result t1" id="v-result" aria-live="polite">
+      <div class="result-bar"></div>
+      <div class="result-in">
+        <div class="readout">
+          <div class="big" id="v-big">—</div>
+          <div class="band-label" id="v-band">Saisir 2 diamètres et 2 dates</div>
+        </div>
+        <p class="r-detail" id="v-interp" style="margin-top:12px"></p>
+        <div class="warn" id="v-warn">
+          <b>Piège subsolide :</b> les adénocarcinomes lépidiques (verre dépoli / part-solide) ont typiquement un VDT &gt; 400 j (souvent 800–1000+). Un VDT long ne rassure donc <b>pas</b> pour un nodule subsolide — surveillance jusqu'à 5 ans.
+        </div>
+      </div>
+    </div>
+    <p class="disabled-note" style="margin-top:12px">Repères usuels (nodule solide) : &lt; 20–30 j → surinfection/inflammation ; 100–400 j → évocateur de malignité ; &gt; 400 j → bénin ou indolent. La volumétrie semi-automatisée reste plus fiable que le diamètre 2D.</p>
+  </section>
+
+  <!-- ============ REPÈRES ============ -->
+  <section class="panel" id="p-r" role="tabpanel" aria-labelledby="tab-r">
+    <div class="cols">
+      <div class="card refcard ben">
+        <h3>En faveur du bénin</h3>
+        <ul>
+          <li><b>Contours</b> nets et réguliers</li>
+          <li><b>Calcifications</b> centrale, diffuse, lamellaire, ou en pop-corn (hamartome)</li>
+          <li><b>Graisse</b> intralésionnelle, −40 à −120 UH (hamartome)</li>
+          <li><b>Cavité</b> à paroi fine (&lt; 4 mm)</li>
+          <li><b>Stabilité ≥ 2 ans</b> — pour un nodule <b>solide</b> uniquement</li>
+          <li>Nodule <b>périfissural</b> juxtapleural (ganglion intrapulmonaire)</li>
+        </ul>
+      </div>
+      <div class="card refcard mal">
+        <h3>En faveur du malin</h3>
+        <ul>
+          <li><b>Contours</b> spiculés ou irréguliers</li>
+          <li><b>Croissance</b> documentée</li>
+          <li><b>Siège</b> lobaire supérieur</li>
+          <li>Morphologie <b>part-solide</b> (composante solide croissante)</li>
+          <li>Paroi de cavité <b>&gt; 15 mm</b></li>
+          <li>Calcification excentrée / absence de calcification bénigne</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <h3 style="font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line-soft)">Nuances utiles</h3>
+      <div class="calc-grid">
+        <div class="cal"><span class="k">Subsolide</span><span class="v">Un nodule subsolide <b>persistant</b> est plus à risque de malignité qu'un nodule solide de même taille, malgré une croissance plus lente.</span></div>
+        <div class="cal"><span class="k">TEP-TDM</span><span class="v">Peu contributive &lt; 8–10 mm et pour le verre dépoli (faible captation ≠ bénignité : carcinoïde, adénocarcinome lépidique).</span></div>
+        <div class="cal"><span class="k">Biopsie</span><span class="v">Périphérique → ponction TDM-guidée ou bronchoscopie robotique/navigation ; central → bronchoscopie ± EBUS radial ; forte probabilité → résection.</span></div>
+        <div class="cal"><span class="k">Herder</span><span class="v">Si TEP réalisée et Brock ≥ 10 %, réévaluer avec le modèle de Herder (bandes BTS &lt; 10 % / 10–70 % / &gt; 70 %).</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BIOPSIE ============ -->
+  <section class="panel" id="p-bx" role="tabpanel" aria-labelledby="tab-bx">
+    <div class="card">
+      <div class="field">
+        <span class="lab">Siège dans le parenchyme</span>
+        <div class="seg tri" id="bx-site">
+          <button aria-pressed="true" onclick="setBX('site','ext',this)">Externe · sous-pleural</button>
+          <button aria-pressed="false" onclick="setBX('site','mid',this)">Tiers moyen</button>
+          <button aria-pressed="false" onclick="setBX('site','int',this)">Central · péri-hilaire</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="lab">Signe du bronche <span class="hint">bronche menant à la lésion (TDM)</span></span>
+        <div class="seg" id="bx-bronchus">
+          <button aria-pressed="false" onclick="setBX('bronchus',true,this)">Présent</button>
+          <button aria-pressed="true" onclick="setBX('bronchus',false,this)">Absent</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="lab">Taille <span class="hint">mm</span></span>
+        <div class="num-row"><div class="num"><input type="number" id="bx-size" min="1" max="60" step="0.5" inputmode="decimal" placeholder="ex. 14" oninput="renderBX()"></div></div>
+      </div>
+      <div class="field">
+        <span class="lab">Emphysème / BPCO sévère <span class="hint">risque de pneumothorax</span></span>
+        <div class="seg" id="bx-emph">
+          <button aria-pressed="false" onclick="setBX('emph',true,this)">Oui</button>
+          <button aria-pressed="true" onclick="setBX('emph',false,this)">Non</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="result t1" id="bx-result" aria-live="polite">
+      <div class="result-bar"></div>
+      <div class="result-in">
+        <div class="r-tier"><span class="dot"></span><span id="bx-tier-txt">En attente</span></div>
+        <p class="r-title" id="bx-title">Saisir la taille du nodule</p>
+        <p class="r-detail" id="bx-detail">La voie de prélèvement recommandée s'affiche automatiquement.</p>
+        <div class="r-note hide" id="bx-note-wrap"><span id="bx-note"></span></div>
+      </div>
+    </div>
+    <p class="disabled-note" style="margin-top:12px">Confirmation par r-EBUS (vue concentrique) avant tout prélèvement bronchoscopique. Signe du bronche présent → rendement bronchoscopique élevé ; absent + sous-pleural → ponction TDM-guidée. Le choix final dépend du plateau technique local et de la RCP.</p>
+  </section>
+
+  <footer>
+    <div class="byline">
+      <span class="by-lab">Réalisé par</span>
+      <span class="by-names">D<sup>r</sup> Samir Guediri &nbsp;·&nbsp; D<sup>r</sup> Nabil Bouhafara</span>
+    </div>
+    <b>Aide à la décision — ne remplace pas le jugement clinique.</b> Fleischner 2017 (MacMahon et al., <i>Radiology</i>) : nodules incidents, adultes &gt; 35 ans, hors dépistage/immunodépression/cancer connu. Modèle de Brock / PanCan2b (McWilliams et al., <i>NEJM</i> 2013) : développé sur TDM basse dose de dépistage, plus fiable &gt; 8 mm ; le seuil BTS de 10 % oriente vers la TEP-TDM. Le modèle de Herder nécessite le résultat TEP — calculateur officiel BTS : <a href="https://www.brit-thoracic.org.uk/clinical-resources/guidelines/pulmonary-nodules/pn-risk-calculator/">brit-thoracic.org.uk</a>.
+    <div style="margin-top:8px;color:var(--muted-2)">Vérifiez la parution éventuelle d'une mise à jour ACR / BTS depuis janvier 2026.</div>
+  </footer>
+
+  </section>
+  <!-- fin stage-calc -->
+
+</div>
+
+<script>
+"use strict";
+
+/* -------- tabs -------- */
+function showTab(k){
+  ["f","b","v","r","bx"].forEach(function(id){
+    document.getElementById("p-"+id).classList.toggle("on", id===k);
+    var t=document.getElementById("tab-"+id);
+    t.setAttribute("aria-selected", id===k ? "true":"false");
+  });
+}
+
+/* -------- segmented helper -------- */
+function press(groupId, btn){
+  var g=document.getElementById(groupId);
+  g.querySelectorAll("button").forEach(function(b){b.setAttribute("aria-pressed","false");});
+  btn.setAttribute("aria-pressed","true");
+}
+
+/* ============ FLEISCHNER ============ */
+var F={type:"solid",count:"single",risk:"low"};
+function setF(key,val,btn){
+  F[key]=val;
+  press("f-"+key, btn);
+  // show/hide contextual fields
+  document.getElementById("f-solid-wrap").classList.toggle("hide", F.type!=="part");
+  var subsolid = (F.type!=="solid");
+  document.getElementById("f-risk-wrap").style.opacity = subsolid ? .4 : 1;
+  document.getElementById("f-risk-note").textContent = subsolid
+    ? "La catégorie de risque n'intervient pas pour les nodules subsolides (conduite selon taille et persistance)."
+    : "Haut risque = tabagisme important, ATCD de cancer, morphologie/localisation suspecte (lobe supérieur), âge avancé, emphysème.";
+  renderF();
+}
+
+function fleischner(){
+  var size=parseFloat(document.getElementById("f-size").value);
+  var solid=parseFloat(document.getElementById("f-solid").value);
+  if(!(size>0)) return null;
+  var single=(F.count==="single");
+  var high=(F.risk==="high");
+  var lt6=size<6, mid=(size>=6&&size<=8), gt8=size>8;
+
+  // ---- SOLID ----
+  if(F.type==="solid"){
+    if(single){
+      if(lt6) return high
+        ? {tier:1,t:"Surveillance optionnelle",d:"TDM optionnelle à 12 mois (haut risque, selon morphologie/localisation).",n:null}
+        : {tier:0,t:"Pas de surveillance de routine",d:"Nodule solide &lt; 6 mm, bas risque : risque de cancer &lt; 1 %.",n:null};
+      if(mid) return high
+        ? {tier:1,t:"TDM à 6–12 mois",d:"Puis TDM à 18–24 mois.",n:null}
+        : {tier:1,t:"TDM à 6–12 mois",d:"Puis envisager une TDM à 18–24 mois.",n:null};
+      if(gt8) return {tier:3,t:"TDM à 3 mois, TEP-TDM ou prélèvement",d:"Envisager l'une de ces options selon la probabilité de malignité.",n:"Estimer la probabilité via l'onglet <b>Risque Brock</b>."};
+    } else {
+      if(lt6) return high
+        ? {tier:1,t:"Surveillance optionnelle",d:"TDM optionnelle à 12 mois (haut risque).",n:"Conduite guidée par le nodule le plus suspect."}
+        : {tier:0,t:"Pas de surveillance de routine",d:"Nodules solides &lt; 6 mm, bas risque.",n:"Conduite guidée par le nodule le plus suspect."};
+      if(mid) return {tier:1,t:"TDM à 3–6 mois",d:high?"Puis TDM à 18–24 mois.":"Puis envisager une TDM à 18–24 mois.",n:"Conduite guidée par le nodule le plus suspect."};
+      if(gt8) return {tier:2,t:"TDM à 3–6 mois",d:high?"Puis TDM à 18–24 mois.":"Puis envisager une TDM à 18–24 mois.",n:"Conduite guidée par le nodule le plus suspect."};
+    }
+  }
+
+  // ---- PURE GROUND-GLASS ----
+  if(F.type==="ggn"){
+    if(single){
+      if(size<6) return {tier:0,t:"Pas de surveillance de routine",d:"Verre dépoli pur &lt; 6 mm.",n:"Si morphologie suspecte, envisager une TDM à 2 et 4 ans."};
+      return {tier:1,t:"TDM à 6–12 mois",d:"Pour confirmer la persistance, puis TDM tous les 2 ans jusqu'à 5 ans.",n:"Croissance lente : surveillance prolongée nécessaire."};
+    } else {
+      if(size<6) return {tier:1,t:"TDM à 3–6 mois",d:"Si stable, envisager une TDM à 2 et 4 ans.",n:"Conduite guidée par le nodule le plus suspect."};
+      return {tier:1,t:"TDM à 3–6 mois",d:"Puis conduite selon le nodule le plus suspect.",n:null};
+    }
+  }
+
+  // ---- PART-SOLID ----
+  if(F.type==="part"){
+    if(single){
+      if(size<6) return {tier:0,t:"Pas de surveillance de routine",d:"Nodule part-solide &lt; 6 mm.",n:"Une composante solide n'est généralement pas caractérisable en dessous de 6 mm."};
+      // >= 6 mm : dépend de la composante solide
+      if(solid>=6) return {tier:3,t:"Forte suspicion — TEP-TDM, biopsie ou résection",d:"Composante solide ≥ 6 mm : à évaluer sans temporiser.",n:"Confirmer d'abord la persistance si le nodule est récent."};
+      return {tier:2,t:"TDM à 3–6 mois",d:"Pour confirmer la persistance ; si inchangé et composante solide &lt; 6 mm, TDM annuelle pendant 5 ans.",n:solid>0?null:"Renseigner la composante solide pour affiner la conduite."};
+    } else {
+      if(size<6) return {tier:1,t:"TDM à 3–6 mois",d:"Si stable, envisager une TDM à 2 et 4 ans.",n:"Conduite guidée par le nodule le plus suspect."};
+      return {tier:2,t:"TDM à 3–6 mois",d:"Puis conduite selon le nodule le plus suspect.",n:null};
+    }
+  }
+  return null;
+}
+
+var TIER_LABEL={0:"Aucun suivi",1:"Surveillance",2:"Surveillance rapprochée",3:"Caractérisation"};
+function renderF(){
+  var r=fleischner();
+  var box=document.getElementById("f-result");
+  box.className="result t"+(r?r.tier:1);
+  if(!r){
+    document.getElementById("f-tier-txt").textContent="En attente";
+    document.getElementById("f-title").innerHTML="Saisir la taille du nodule";
+    document.getElementById("f-detail").innerHTML="La recommandation s'affiche automatiquement.";
+    document.getElementById("f-note-wrap").classList.add("hide");
+    return;
+  }
+  document.getElementById("f-tier-txt").textContent=TIER_LABEL[r.tier];
+  document.getElementById("f-title").innerHTML=r.t;
+  document.getElementById("f-detail").innerHTML=r.d;
+  var nw=document.getElementById("f-note-wrap");
+  if(r.n){nw.classList.remove("hide");document.getElementById("f-note").innerHTML=r.n;}
+  else{nw.classList.add("hide");}
+}
+
+/* ============ BROCK ============ */
+var B={sex:"M",type:"solid",upper:false,spic:false,emph:false,fam:false};
+function setB(key,val,btn){B[key]=val;press("b-"+key,btn);renderB();}
+
+function brock(){
+  var age=parseFloat(document.getElementById("b-age").value);
+  var size=parseFloat(document.getElementById("b-size").value);
+  var count=parseInt(document.getElementById("b-count").value,10);
+  if(!(count>0)) count=1;
+  if(!(age>0)||!(size>0)) return null;
+
+  var sexT=(B.sex==="F")?0.6011:0;
+  var famT=B.fam?0.2961:0;
+  var emphT=B.emph?0.2953:0;
+  var typeT=(B.type==="ggn")?-0.1276:(B.type==="part")?0.3770:0;
+  var upperT=B.upper?0.6581:0;
+  var spicT=B.spic?0.7729:0;
+  var sizeT=-5.3854*(Math.pow(size/10,-0.5)-1.58113883);
+  var lo=0.0287*(age-62)+sexT+famT+emphT+sizeT+typeT+upperT-0.0824*(count-4)+spicT-6.7892;
+  var p=100*Math.exp(lo)/(1+Math.exp(lo));
+  return Math.max(0,Math.min(100,p));
+}
+
+function renderB(){
+  var p=brock();
+  var box=document.getElementById("b-result");
+  var big=document.getElementById("b-big");
+  var band=document.getElementById("b-band");
+  var meter=document.getElementById("b-meter");
+  var interp=document.getElementById("b-interp");
+  var note=document.getElementById("b-note");
+
+  if(p===null){
+    box.className="result t1";
+    big.innerHTML="—<span class='pct'></span>";
+    band.textContent="Saisir âge et taille";
+    meter.style.visibility="hidden";
+    interp.textContent="";
+    note.innerHTML="Formule de Brock complète (avec spiculation).";
+    return;
+  }
+  meter.style.visibility="visible";
+  var shown = p<1 ? p.toFixed(1) : Math.round(p);
+  big.innerHTML=shown+"<span class='pct'>%</span>";
+  document.getElementById("b-marker").style.left=p+"%";
+
+  var tier,label,txt;
+  if(p<10){tier=0;label="Faible probabilité";txt="Surveillance TDM (seuil BTS &lt; 10 %). Suivre les intervalles Fleischner selon la taille.";}
+  else if(p<70){tier=2;label="Probabilité intermédiaire";txt="TEP-TDM recommandée pour affiner (puis réévaluer avec Herder si disponible).";}
+  else{tier=3;label="Forte probabilité";txt="Orientation vers prélèvement ou résection après TEP-TDM / RCP.";}
+  box.className="result t"+tier;
+  band.textContent=label;
+  interp.innerHTML=txt;
+
+  var extra="";
+  if(parseFloat(document.getElementById("b-size").value)<8) extra=" <b>Nodule &lt; 8 mm : fiabilité limitée du modèle.</b>";
+  note.innerHTML="Probabilité de cancer à 2–4 ans (Brock / PanCan)."+extra;
+}
+
+/* ============ VDT ============ */
+var Vmode="sph";
+function setVmode(m,btn){
+  Vmode=m;
+  press("v-mode",btn);
+  document.getElementById("v-sph").classList.toggle("hide", m!=="sph");
+  document.getElementById("v-ell").classList.toggle("hide", m!=="ell");
+  document.getElementById("v-vol").classList.toggle("hide", m!=="vol");
+  renderV();
+}
+function fold(a,b){return "volume × "+(b/a).toFixed(2).replace(".",",");}
+
+function renderV(){
+  var t1=document.getElementById("v-t1").value;
+  var t2=document.getElementById("v-t2").value;
+  var box=document.getElementById("v-result");
+  var big=document.getElementById("v-big");
+  var band=document.getElementById("v-band");
+  var interp=document.getElementById("v-interp");
+  var warn=document.getElementById("v-warn");
+
+  function incomplete(msg){
+    box.className="result t1";big.textContent="—";
+    band.textContent=msg;interp.textContent="";warn.classList.add("hide");
+  }
+
+  // volumes (constante π/6 annulée dans le ratio)
+  var V1,V2;
+  if(Vmode==="sph"){
+    var d1=parseFloat(document.getElementById("v-d1").value);
+    var d2=parseFloat(document.getElementById("v-d2").value);
+    if(!(d1>0)||!(d2>0)||!t1||!t2){incomplete("Saisir 2 diamètres et 2 dates");return;}
+    V1=Math.PI/6*Math.pow(d1,3); V2=Math.PI/6*Math.pow(d2,3);
+  } else if(Vmode==="ell"){
+    var L1=parseFloat(document.getElementById("v-l1").value),w1=parseFloat(document.getElementById("v-w1").value),h1=parseFloat(document.getElementById("v-h1").value);
+    var L2=parseFloat(document.getElementById("v-l2").value),w2=parseFloat(document.getElementById("v-w2").value),h2=parseFloat(document.getElementById("v-h2").value);
+    if(!(L1>0&&w1>0&&h1>0&&L2>0&&w2>0&&h2>0)||!t1||!t2){incomplete("Saisir les 3 axes des 2 scanners et 2 dates");return;}
+    V1=Math.PI/6*L1*w1*h1; V2=Math.PI/6*L2*w2*h2;
+  } else {
+    var Va=parseFloat(document.getElementById("v-vol1").value);
+    var Vb=parseFloat(document.getElementById("v-vol2").value);
+    if(!(Va>0)||!(Vb>0)||!t1||!t2){incomplete("Saisir 2 volumes et 2 dates");return;}
+    V1=Va; V2=Vb;
+  }
+
+  var days=(new Date(t2)-new Date(t1))/86400000;
+  if(!(days>0)){
+    box.className="result t2";big.textContent="—";
+    band.textContent="Dates invalides";interp.innerHTML="La date 2 doit être postérieure à la date 1.";warn.classList.add("hide");return;
+  }
+  warn.classList.remove("hide");
+  var f=fold(V1,V2);
+
+  if(V2<V1){
+    box.className="result t0";big.textContent="↓";
+    band.textContent="Nodule en régression";
+    interp.innerHTML="Diminution de volume (VDT négatif) : évocateur d'un processus bénin, inflammatoire ou infectieux. <span style='color:var(--muted)'>("+f+")</span>";
+    return;
+  }
+  if(V2===V1){
+    box.className="result t0";big.innerHTML="stable";
+    band.textContent="Pas de croissance mesurable";
+    interp.innerHTML="Volume inchangé sur l'intervalle. Poursuivre la surveillance selon Fleischner.";
+    return;
+  }
+  var vdt=(days*Math.log(2))/Math.log(V2/V1);
+  var v=Math.round(vdt);
+  big.innerHTML=v+"<span class='pct' style='font-size:22px'> j</span>";
+
+  var tier,label,txt;
+  if(vdt<30){tier=2;label="Croissance rapide";txt="VDT &lt; 30 j : évoque une cause infectieuse/inflammatoire plutôt qu'un cancer solide. Contrôle rapproché.";}
+  else if(vdt<=400){tier=3;label="Croissance suspecte";txt="VDT 30–400 j : compatible avec une lésion maligne solide. Caractérisation (TEP-TDM, prélèvement).";}
+  else{tier=1;label="Croissance lente";txt="VDT &gt; 400 j : favorise le bénin/indolent pour un nodule solide — mais voir l'avertissement pour les lésions subsolides.";}
+  box.className="result t"+tier;
+  band.textContent=label;
+  interp.innerHTML=txt+" &nbsp;<span style='color:var(--muted)'>(intervalle : "+Math.round(days)+" j · "+f+")</span>";
+}
+
+/* ============ BIOPSIE ============ */
+var BX={site:"ext",bronchus:false,emph:false};
+function setBX(k,v,btn){BX[k]=v;press("bx-"+k,btn);renderBX();}
+
+function biopsyRoute(){
+  var size=parseFloat(document.getElementById("bx-size").value);
+  if(!(size>0)) return null;
+  var s=BX.site, br=BX.bronchus, emph=BX.emph;
+  var small=size<10, large=size>20;
+  var r={tier:1,t:"",d:"",n:""};
+
+  if(s==="int"){
+    r.tier=1;
+    r.t="Bronchoscopie guidée (navigation / ENB) ± r-EBUS";
+    r.d= br
+      ? "Signe du bronche présent : bon rendement bronchoscopique. Si contact d'une grosse bronche ou adénopathie associée → EBUS-TBNA."
+      : "Sans signe du bronche, le rendement dépend du repérage r-EBUS ; envisager robotique / cone-beam si disponible.";
+    r.n="Ponction TDM-guidée déconseillée pour une lésion centrale (trajet profond, risque de pneumothorax et d'hémorragie).";
+  }
+  else if(s==="ext"){
+    if(br){
+      r.tier=1;
+      r.t="Ponction TDM-guidée ou bronchoscopie guidée";
+      r.d="Sous-pleural avec signe du bronche : la TDM-guidée offre un rendement élevé ; la bronchoscopie guidée est une alternative à moindre risque de pneumothorax.";
+      if(emph) r.d+=" Emphysème : privilégier la voie bronchoscopique (risque de pneumothorax accru en transthoracique).";
+    } else {
+      r.tier=1;
+      r.t="Ponction TDM-guidée transthoracique";
+      r.d="Sous-pleural sans signe du bronche : la voie transthoracique est la référence (rendement bronchoscopique faible sans bronche cible).";
+      if(emph){r.tier=2;r.d+=" Emphysème sévère : risque de pneumothorax élevé — discuter robotique / cone-beam ou résection en RCP.";}
+    }
+  }
+  else {
+    if(br){
+      r.tier= small?2:1;
+      r.t= small ? "Bronchoscopie robotique / navigation ± r-EBUS" : "Bronchoscopie guidée (navigation / ENB) ± r-EBUS";
+      r.d="Tiers moyen avec signe du bronche : voie bronchoscopique privilégiée"+(small?" ; la robotique améliore la portée et la stabilité pour ce petit nodule.":".");
+    } else {
+      r.tier=2;
+      r.t="Ponction TDM-guidée, ou robotique / cone-beam";
+      r.d="Tiers moyen sans signe du bronche : TDM-guidée si la cible est atteignable sans traverser une bulle ; sinon robotique / cone-beam avec correction de la divergence TDM–corps.";
+      if(emph) r.d+=" Emphysème : attention au risque de pneumothorax en transthoracique.";
+    }
+  }
+
+  if(small) r.n=(r.n?r.n+" ":"")+"Nodule < 10 mm : rendement plus faible toutes techniques confondues ; peser biopsie vs surveillance vs résection selon la probabilité (onglet Brock), en RCP.";
+  else if(large) r.n=(r.n?r.n+" ":"")+"≥ 20 mm : rendement élevé quelle que soit la voie.";
+  r.n=(r.n?r.n+" ":"")+"Forte probabilité de malignité + biopsie non contributive/non réalisable → résection diagnostique et thérapeutique (VATS) en RCP.";
+  return r;
+}
+
+var BX_TIER={1:"Voie standard",2:"Plateau spécialisé",3:"Chirurgie / RCP"};
+function renderBX(){
+  var r=biopsyRoute();
+  var box=document.getElementById("bx-result");
+  box.className="result t"+(r?r.tier:1);
+  if(!r){
+    document.getElementById("bx-tier-txt").textContent="En attente";
+    document.getElementById("bx-title").textContent="Saisir la taille du nodule";
+    document.getElementById("bx-detail").textContent="La voie de prélèvement recommandée s'affiche automatiquement.";
+    document.getElementById("bx-note-wrap").classList.add("hide");
+    return;
+  }
+  document.getElementById("bx-tier-txt").textContent=BX_TIER[r.tier];
+  document.getElementById("bx-title").innerHTML=r.t;
+  document.getElementById("bx-detail").innerHTML=r.d;
+  var nw=document.getElementById("bx-note-wrap");
+  if(r.n){nw.classList.remove("hide");document.getElementById("bx-note").innerHTML=r.n;}
+  else nw.classList.add("hide");
+}
+
+/* init calculette */
+renderF();renderB();renderV();renderBX();
+
+/* ============ INSCRIPTION / VÉRIFICATION ============ */
+function showMsg(el, text, ok){
+  el.textContent = text;
+  el.className = "form-msg show " + (ok ? "ok" : "err");
+}
+
+function showStage(name){
+  ["register","verify","calc"].forEach(function(id){
+    document.getElementById("stage-"+id).classList.toggle("hide", id!==name);
+  });
+}
+
+var formRegister = document.getElementById("form-register");
+var formVerify = document.getElementById("form-verify");
+var btnRegister = document.getElementById("btn-register");
+var btnVerify = document.getElementById("btn-verify");
+var registerMsg = document.getElementById("register-msg");
+var verifyMsg = document.getElementById("verify-msg");
+
+formRegister.addEventListener("submit", function(e){
+  e.preventDefault();
+  var nom = document.getElementById("reg-nom").value.trim();
+  var prenom = document.getElementById("reg-prenom").value.trim();
+  var lieu = document.getElementById("reg-lieu").value.trim();
+  var email = document.getElementById("reg-email").value.trim();
+
+  btnRegister.disabled = true;
+  btnRegister.textContent = "Envoi en cours…";
+
+  fetch("/api/inscription", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nom:nom, prenom:prenom, lieu:lieu, email:email})
+  }).then(function(r){ return r.json(); }).then(function(data){
+    btnRegister.disabled = false;
+    btnRegister.textContent = "S'inscrire et recevoir mon code";
+    if(data.ok){
+      showMsg(registerMsg, "Inscription enregistrée. Un code d'accès a été envoyé à " + email + ".", true);
+      document.getElementById("ver-email").value = email;
+      showStage("verify");
+    } else {
+      showMsg(registerMsg, data.error || "Une erreur est survenue.", false);
+    }
+  }).catch(function(){
+    btnRegister.disabled = false;
+    btnRegister.textContent = "S'inscrire et recevoir mon code";
+    showMsg(registerMsg, "Impossible de contacter le serveur.", false);
+  });
+});
+
+formVerify.addEventListener("submit", function(e){
+  e.preventDefault();
+  var email = document.getElementById("ver-email").value.trim();
+  var code = document.getElementById("ver-code").value.trim();
+
+  btnVerify.disabled = true;
+  btnVerify.textContent = "Vérification…";
+
+  fetch("/api/verifier", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({email:email, code:code})
+  }).then(function(r){ return r.json(); }).then(function(data){
+    btnVerify.disabled = false;
+    btnVerify.textContent = "Accéder à la calculette";
+    if(data.ok){
+      sessionStorage.setItem("np_access", JSON.stringify({email:email, code:code}));
+      showStage("calc");
+    } else {
+      showMsg(verifyMsg, "Code invalide pour cet email. Vérifiez votre boîte mail.", false);
+    }
+  }).catch(function(){
+    btnVerify.disabled = false;
+    btnVerify.textContent = "Accéder à la calculette";
+    showMsg(verifyMsg, "Impossible de contacter le serveur.", false);
+  });
+});
+
+document.getElementById("btn-back-register").addEventListener("click", function(){
+  showStage("register");
+});
+
+/* accès direct si déjà vérifié dans cette session de navigateur */
+(function(){
+  var saved = sessionStorage.getItem("np_access");
+  if(saved){
+    try{
+      var d = JSON.parse(saved);
+      fetch("/api/verifier", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify(d)
+      }).then(function(r){return r.json();}).then(function(data){
+        if(data.ok) showStage("calc");
+      }).catch(function(){});
+    }catch(e){}
+  }
+})();
+</script>
+</body>
+</html>
