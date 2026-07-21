@@ -125,7 +125,9 @@ def send_via_sendgrid(to_email, nom, prenom, code):
         },
         timeout=10,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        app.logger.error("SendGrid a refusé l'envoi (%s) : %s", resp.status_code, resp.text)
+        resp.raise_for_status()
     return True
 
 
