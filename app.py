@@ -11,15 +11,16 @@ import requests
 from flask import Flask, jsonify, render_template, request
 from openpyxl import Workbook, load_workbook
 
+BASE_DIR = Path(__file__).resolve().parent
+
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(BASE_DIR / ".env")
 except ImportError:
     pass
 
 app = Flask(__name__)
 
-BASE_DIR = Path(__file__).parent
 DATA_DIR = Path(os.environ.get("DATA_DIR", str(BASE_DIR / "data")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 EXCEL_PATH = DATA_DIR / "inscriptions.xlsx"
