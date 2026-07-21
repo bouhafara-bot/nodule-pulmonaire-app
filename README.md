@@ -21,10 +21,20 @@ email définitifs.
 
 ## Configurer l'envoi d'email
 
-1. Copier `.env.example` en `.env`
-2. Renseigner `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`
-   avec les identifiants de votre fournisseur email (Gmail avec un "mot de passe
-   d'application", Outlook, SendGrid, OVH, etc.)
+Deux méthodes possibles (l'app essaie SendGrid en premier, puis le SMTP
+classique si SendGrid n'est pas configuré) :
+
+**Via SMTP classique** — copier `.env.example` en `.env` et renseigner
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` avec les
+identifiants de votre fournisseur (Gmail avec un "mot de passe d'application",
+Outlook, OVH, etc.). Fonctionne sur la plupart des hébergeurs, **mais pas sur
+PythonAnywhere gratuit** (voir plus bas).
+
+**Via l'API SendGrid** (nécessaire sur PythonAnywhere gratuit) — renseigner
+`SENDGRID_API_KEY` et `SENDGRID_FROM` (l'adresse d'expéditeur doit être
+vérifiée dans votre compte SendGrid : "Sender Authentication" → "Single Sender
+Verification"). SendGrid propose 100 emails/jour gratuits. Cette méthode passe
+par une requête HTTPS classique, pas par une connexion SMTP directe.
 
 ## Déployer en ligne
 
@@ -79,6 +89,46 @@ git push -u origin main
    `SMTP_PASSWORD`, `SMTP_FROM` dans l'onglet "Variables".
 5. Railway assigne automatiquement `PORT` — rien à faire, `Procfile` s'en sert déjà.
 6. Générez un domaine public dans "Settings → Networking → Generate Domain".
+
+### Option C — PythonAnywhere (gratuit à vie)
+
+Aucune carte bancaire requise, stockage persistant inclus dans votre compte —
+mais le plan gratuit ("Beginner") **bloque les connexions SMTP sortantes**.
+D'où l'ajout du support SendGrid (API HTTPS) dans `app.py`, qui fonctionne sur
+ce plan.
+
+1. Créez un compte gratuit sur [pythonanywhere.com](https://www.pythonanywhere.com).
+2. Ouvrez une **Bash console** (onglet "Consoles" → "Bash") et clonez votre
+   dépôt GitHub :
+   ```
+   git clone <URL-de-votre-dépôt-GitHub> nodule-pulmonaire-app
+   cd nodule-pulmonaire-app
+   ```
+   (Si vous n'avez pas encore poussé le code sur GitHub, voir l'étape commune
+   ci-dessus — ou utilisez l'onglet "Files" pour uploader les fichiers un par un.)
+3. Créez un environnement virtuel et installez les dépendances :
+   ```
+   mkvirtualenv --python=/usr/bin/python3.10 nodule-venv
+   pip install -r requirements.txt
+   ```
+4. Créez le fichier `.env` directement sur le serveur (onglet "Files", dans le
+   dossier du projet) avec vos vraies valeurs `SENDGRID_API_KEY` et
+   `SENDGRID_FROM` (ce fichier n'est jamais poussé sur GitHub grâce au
+   `.gitignore`).
+5. Onglet "Web" → "Add a new web app" → "Manual configuration" → Python 3.10.
+6. Dans la section "Virtualenv", indiquez le chemin de l'environnement créé à
+   l'étape 3 (ex. `/home/votrenom/.virtualenvs/nodule-venv`).
+7. Cliquez sur le lien du fichier WSGI et remplacez son contenu par celui de
+   [wsgi_pythonanywhere_example.py](wsgi_pythonanywhere_example.py) (en
+   adaptant `votrenom` et le chemin du projet).
+8. Cliquez sur "Reload" en haut de l'onglet "Web". Votre site est en ligne sur
+   `https://votrenom.pythonanywhere.com`.
+
+Avant de vous fier au SMTP classique ou à une API email tierce sur ce plan,
+vérifiez la liste des sites autorisés en sortie depuis votre compte (menu
+"Account" → lien "IP addresses & whitelisting", ou la page
+`pythonanywhere.com/whitelist/` une fois connecté) — elle peut évoluer, et
+c'est la source de vérité, pas ce document.
 
 Je ne peux pas créer ces comptes, entrer vos identifiants ou effectuer un
 paiement à votre place — ces étapes sont à faire de votre côté. Une fois un

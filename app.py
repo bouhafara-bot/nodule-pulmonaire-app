@@ -7,6 +7,7 @@ from datetime import datetime
 from email.mime.text import MIMEText
 from pathlib import Path
 
+import requests
 from flask import Flask, jsonify, render_template, request
 from openpyxl import Workbook, load_workbook
 
@@ -66,14 +67,11 @@ def find_matching_code(email, code):
     return False
 
 
-def send_code_email(to_email, nom, prenom, code):
-    host = os.environ.get("SMTP_HOST")
-    port = int(os.environ.get("SMTP_PORT", "587"))
-    user = os.environ.get("SMTP_USER")
-    password = os.environ.get("SMTP_PASSWORD")
-    from_addr = os.environ.get("SMTP_FROM", user)
+EMAIL_SUBJECT = "Votre code d'accès — Nodule pulmonaire, aide à la décision"
 
-    body = (
+
+def _email_body(nom, prenom, code):
+    return (
         f"Bonjour {prenom} {nom},\n\n"
         "Voici votre code d'accès personnel pour utiliser la calculette "
         "« Nodule pulmonaire — aide à la décision » :\n\n"
@@ -82,20 +80,64 @@ def send_code_email(to_email, nom, prenom, code):
         "pour accéder à l'outil.\n\n"
         "Cet outil est une aide à la décision et ne remplace pas le jugement clinique.\n"
     )
-    msg = MIMEText(body, "plain", "utf-8")
-    msg["Subject"] = "Votre code d'accès — Nodule pulmonaire, aide à la décision"
-    msg["From"] = from_addr or "noreply@example.com"
-    msg["To"] = to_email
+
+
+def send_via_smtp(to_email, nom, prenom, code):
+    host = os.environ.get("SMTP_HOST")
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    user = os.environ.get("SMTP_USER")
+    password = os.environ.get("SMTP_PASSWORD")
+    from_addr = os.environ.get("SMTP_FROM", user)
 
     if not host or not user or not password:
-        app.logger.warning("SMTP non configuré — code généré pour %s : %s", to_email, code)
-        return False
+        return None  # SMTP non configuré
+
+    msg = MIMEText(_email_body(nom, prenom, code), "plain", "utf-8")
+    msg["Subject"] = EMAIL_SUBJECT
+    msg["From"] = from_addr or "noreply@example.com"
+    msg["To"] = to_email
 
     with smtplib.SMTP(host, port, timeout=10) as server:
         server.starttls()
         server.login(user, password)
         server.sendmail(msg["From"], [to_email], msg.as_string())
     return True
+
+
+def send_via_sendgrid(to_email, nom, prenom, code):
+    api_key = os.environ.get("SENDGRID_API_KEY")
+    from_addr = os.environ.get("SENDGRID_FROM")
+
+    if not api_key or not from_addr:
+        return None  # SendGrid non configuré
+
+    resp = requests.post(
+        "https://api.sendgrid.com/v3/mail/send",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "personalizations": [{"to": [{"email": to_email}]}],
+            "from": {"email": from_addr},
+            "subject": EMAIL_SUBJECT,
+            "content": [{"type": "text/plain", "value": _email_body(nom, prenom, code)}],
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return True
+
+
+def send_code_email(to_email, nom, prenom, code):
+    """Essaie SendGrid (API HTTP, fonctionne même quand le SMTP sortant est
+    bloqué, ex. PythonAnywhere gratuit), puis SMTP classique si configuré."""
+    for sender in (send_via_sendgrid, send_via_smtp):
+        result = sender(to_email, nom, prenom, code)
+        if result is True:
+            return True
+    app.logger.warning("Aucun envoi d'email configuré — code généré pour %s : %s", to_email, code)
+    return False
 
 
 @app.route("/")
